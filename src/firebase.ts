@@ -70,13 +70,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Verify database connection at startup
 async function testConnection() {
   try {
-    // Race connection test with a fast timeout so it won't block or lag the user session when offline
+    // Race connection test with a generous timeout so it won't trigger false alarms on slow iframe starts or container latency
     await Promise.race([
       getDocFromServer(doc(db, 'test', 'connection')),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('the client is offline (connection timeout)')), 2500))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('the client is offline (connection timeout)')), 15000))
     ]);
   } catch (error) {
-    console.warn("Firestore is operating in offline mode. Local state and localStorage will continue to work seamlessly.");
+    // An permission error means we successfully reached Firestore backend (the config and network are active!)
+    if (error instanceof Error && (error.message.includes('permission') || error.message.includes('insufficient') || error.message.includes('permission-denied'))) {
+      console.log("Firestore connectivity verified successfully (endpoint is reachable and responsive).");
+      return;
+    }
+    console.warn("Firestore connection check failed. Operating in seamless local-first mode.", error);
     if (error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('offline') || error.message.includes('timeout'))) {
       console.error("Please check your Firebase configuration and internet availability.");
     }
