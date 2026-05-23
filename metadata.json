@@ -1,0 +1,8 @@
+{
+  "name": "حكيم البستان",
+  "description": "مرشد البستان المعرفي لتقديم ملخصات تفاعلية وتأملات مخصصة لكتب تطوير الذات بأسلوب شاعري مستوحى من الطبيعة.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
