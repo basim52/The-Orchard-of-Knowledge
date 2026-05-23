@@ -277,6 +277,62 @@ export default function App() {
     loadBooks();
   }, []);
 
+  // Synchronize state with URL routing & browser history (Requirement 5)
+  useEffect(() => {
+    const handlePopState = () => {
+      if (books.length === 0) return;
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      if (pathParts.length === 2) {
+        const [category, bookId] = pathParts;
+        const foundBook = books.find(b => b.id === bookId);
+        if (foundBook) {
+          setSelectedCategory(category);
+          setSelectedBook(foundBook);
+          setView('tree');
+          setActiveTab('tree');
+          setSelectedLeaf(null);
+        }
+      } else if (pathParts.length === 1) {
+        const [category] = pathParts;
+        const validCategories = ["self-development", "psychology", "children", "sociology", "all"];
+        if (validCategories.includes(category)) {
+          setSelectedCategory(category);
+          setSelectedBook(null);
+          setView('home');
+        }
+      } else {
+        setSelectedBook(null);
+        setView('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    
+    // Initial sync once books are loaded
+    if (books.length > 0) {
+      handlePopState();
+    }
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [books]);
+
+  // Push state to url on navigation changes (Requirement 5)
+  useEffect(() => {
+    if (books.length === 0) return;
+    if (view === 'tree' && selectedBook) {
+      const cat = selectedBook.category || selectedCategory || 'self-development';
+      const targetPath = `/${cat}/${selectedBook.id}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState(null, '', targetPath);
+      }
+    } else {
+      const catPath = !selectedCategory || selectedCategory === 'all' ? '/' : `/${selectedCategory}`;
+      if (window.location.pathname !== catPath) {
+        window.history.pushState(null, '', catPath);
+      }
+    }
+  }, [view, selectedBook, selectedCategory, books]);
+
   // Pre-load from local storage
   useEffect(() => {
     const savedChallenges = localStorage.getItem('garden_challenges');
@@ -571,9 +627,9 @@ export default function App() {
               <span className="text-xl">🌳</span>
             </div>
             <div>
-              <h1 className="text-lg font-serif font-black text-emerald-950 flex items-center gap-1">
+              <div id="brand-logo-text" className="text-lg font-serif font-black text-emerald-950 flex items-center gap-1">
                 بستان المعرفة
-              </h1>
+              </div>
               <p className="text-[10px] text-emerald-800/80 -mt-1 font-serif">مرشدك التفاعلي لتأمل وتطوير الذات</p>
             </div>
           </div>
@@ -784,6 +840,16 @@ export default function App() {
                     >
                       {/* Stylized Standing Book Widget */}
                       <div className={`aspect-[3/4] rounded-r-2xl rounded-l-xs shadow-lg hover:shadow-2xl hover:-translate-y-3 transition-all duration-300 border-r-8 relative overflow-hidden flex flex-col justify-between p-4 ${book.cover}`}>
+                        
+                        {/* Crawlable cover image with Alt text for SEO (Requirement 5) */}
+                        <img 
+                          src={`/assets/dynamic-covers/${book.id}.jpg`} 
+                          alt={`غلاف كتاب ${book.title}`} 
+                          className="sr-only" 
+                          referrerPolicy="no-referrer"
+                          onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                        />
+
                         {/* Book Spine Golden Overlay line */}
                         <div className="absolute top-0 right-0 w-1.5 h-full bg-black/15"></div>
                         <div className="absolute top-0 left-0 w-full h-1 bg-white/10"></div>
@@ -906,10 +972,40 @@ export default function App() {
              ACTIVE BOOK PAGE: INTERACTIVE TREE
              ======================================= */
           selectedBook && (
-            <div className="space-y-8">
+            <div className="space-y-6">
               
+              {/* Dynamic Breadcrumbs (Requirement 7) */}
+              <div id="book-breadcrumbs" className="flex items-center gap-1.5 text-xs text-slate-500 font-serif pb-1 justify-start">
+                <button onClick={handleBackToGarden} className="hover:text-emerald-800 transition cursor-pointer">بستان المعرفة</button>
+                <ChevronLeft className="w-3 h-3 text-slate-400 select-none" />
+                <button 
+                  onClick={() => { 
+                    setSelectedCategory(selectedBook.category || 'self-development'); 
+                    handleBackToGarden(); 
+                  }} 
+                  className="hover:text-emerald-800 transition cursor-pointer"
+                >
+                  {selectedBook.category === 'self-development' ? 'تطوير الذات' :
+                   selectedBook.category === 'psychology' ? 'علم النفس' :
+                   selectedBook.category === 'children' ? 'كتب الأطفال' :
+                   selectedBook.category === 'sociology' ? 'علم الاجتماع' : 'تطوير الذات'}
+                </button>
+                <ChevronLeft className="w-3 h-3 text-slate-400 select-none" />
+                <span className="font-bold text-slate-700">{selectedBook.title}</span>
+              </div>
+
               {/* Poetic Book Header Banner */}
               <div className="flex flex-col bg-white rounded-3xl border border-emerald-100/50 p-6 md:p-8 gap-4 shadow-xs">
+                
+                {/* Dynamically Crawlable Cover Image with Alt Text (Requirement 5 & Guidelines) */}
+                <img 
+                  src={`/assets/dynamic-covers/${selectedBook.id}.jpg`} 
+                  alt={`غلاف شجرة كتاب ${selectedBook.title}`} 
+                  className="sr-only" 
+                  referrerPolicy="no-referrer"
+                  onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                />
+
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 text-xs text-emerald-800 font-serif font-black">
@@ -917,10 +1013,10 @@ export default function App() {
                       <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full"></span>
                       <span>{selectedBook.author}</span>
                     </div>
-                    <h2 className="text-2xl md:text-3xl font-serif font-black text-emerald-950 flex items-center gap-2">
+                    <h1 className="text-2xl md:text-3xl font-serif font-black text-emerald-950 flex items-center gap-2">
                       <span>شجرة:</span>
                       <span>{selectedBook.title}</span>
-                    </h2>
+                    </h1>
                   </div>
 
                   <div className="flex items-center gap-2 bg-emerald-50/50 border border-emerald-150 px-4 py-2 rounded-2xl text-xs text-emerald-990 font-serif shrink-0">
@@ -1143,6 +1239,50 @@ export default function App() {
                         onLeafClick={handleLeafClick}
                         selectedLeafName={selectedLeaf?.name}
                       />
+
+                      {/* فهرس الأغصان والأوراق المكتوب (Outline for SEO & Accessibility - Requirement 4) */}
+                      <div className="bg-white rounded-3xl border border-emerald-100/50 p-6 md:p-8 mt-4 text-right space-y-6">
+                        <div className="border-b border-emerald-100/30 pb-3 flex items-center justify-between">
+                          <span className="text-xs text-slate-400 font-sans font-medium">فهرس شجري متكامل</span>
+                          <h2 className="text-lg font-serif font-black text-slate-800">
+                            أغصان وأوراق كتاب: {selectedBook.title}
+                          </h2>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {selectedBook.branches.map((branch, bIdx) => (
+                            <div key={bIdx} className="space-y-3 bg-[#fbfbf9] p-4 rounded-2xl border border-slate-100 flex flex-col justify-between">
+                              <div className="space-y-1.5">
+                                <h2 className="text-md font-serif font-black text-emerald-900 flex items-center gap-1.5 justify-end">
+                                  <span>{branch.name}</span>
+                                  <span className="text-emerald-600">🌿</span>
+                                </h2>
+                                <p className="text-xs text-[#5c6861] leading-relaxed font-serif">
+                                  {branch.description}
+                                </p>
+                              </div>
+                              <div className="space-y-2 border-t border-slate-100/70 pt-2.5 mt-2.5">
+                                {branch.leaves.map((leaf, lIdx) => (
+                                  <button 
+                                    key={lIdx} 
+                                    onClick={() => handleLeafClick(leaf, branch.name)}
+                                    className={`w-full p-2.5 rounded-xl border text-right transition-all cursor-pointer flex justify-between items-center ${
+                                      selectedLeaf?.name === leaf.name 
+                                        ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-bold' 
+                                        : 'bg-white border-slate-200 hover:bg-slate-50 text-slate-800'
+                                    }`}
+                                  >
+                                    <span className="text-[10px] font-serif text-slate-400">انقر للتأمل</span>
+                                    <h3 className="text-xs md:text-sm font-serif font-bold flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                                      {leaf.name}
+                                    </h3>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
 
                     {/* Leaf Detail Sliding Custom Drawer/Panel (4 cols on desktop) */}
@@ -1157,9 +1297,9 @@ export default function App() {
                           </div>
 
                           <div className="space-y-4">
-                            <h4 className="text-xl md:text-2xl font-serif font-black text-emerald-950">
+                            <h3 className="text-xl md:text-2xl font-serif font-black text-emerald-950">
                               {selectedLeaf.name}
-                            </h4>
+                            </h3>
 
                             <div className="space-y-1">
                               <span className="text-xs font-bold text-slate-400 block">التفسير والتبسيط العذب</span>

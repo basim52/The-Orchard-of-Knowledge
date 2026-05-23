@@ -7,6 +7,203 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// Helper to retrieve all book JSON files dynamically from /data/ subdirectories on the filesystem
+function getAllBooks(): any[] {
+  const dataRootDir = path.join(process.cwd(), "data");
+  const booksData: any[] = [];
+
+  if (!fs.existsSync(dataRootDir)) {
+    return booksData;
+  }
+
+  try {
+    const categories = fs.readdirSync(dataRootDir, { withFileTypes: true });
+
+    for (const cat of categories) {
+      if (cat.isDirectory()) {
+        const categoryPath = path.join(dataRootDir, cat.name);
+        if (fs.existsSync(categoryPath)) {
+          const files = fs.readdirSync(categoryPath);
+
+          for (const file of files) {
+            if (file.endsWith(".json")) {
+              try {
+                const filePath = path.join(categoryPath, file);
+                const content = fs.readFileSync(filePath, "utf-8");
+                const parsed = JSON.parse(content);
+                parsed.category = cat.name; // Keep track of the folder category
+                booksData.push(parsed);
+              } catch (e) {
+                console.error(`Error parsing file ${file} in ${cat.name}:`, e);
+              }
+            }
+          }
+        }
+      } else if (cat.isFile() && cat.name.endsWith(".json")) {
+        try {
+          const filePath = path.join(dataRootDir, cat.name);
+          const content = fs.readFileSync(filePath, "utf-8");
+          const parsed = JSON.parse(content);
+          parsed.category = "general";
+          booksData.push(parsed);
+        } catch (e) {
+          console.error(`Error parsing file ${cat.name} in data root:`, e);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error reading data folder directory:", error);
+  }
+
+  return booksData;
+}
+
+// Intercept page viewer requests and inject custom meta-data & schemas for SEO (Requirement 1, 2, 7)
+async function serveSpaWithSeo(req: express.Request, res: express.Response, htmlPath: string, viteInstance?: any) {
+  try {
+    let html = fs.readFileSync(htmlPath, "utf-8");
+
+    if (viteInstance) {
+      html = await viteInstance.transformIndexHtml(req.originalUrl || req.url, html);
+    }
+
+    const parts = req.path.split("/").filter(Boolean);
+    let title = "بستان المعرفة | شجرة معرفة تفاعلية لتأمل كتب تطوير الذات";
+    let description = "تأمل خلاصة كتب النفس وتطوير الذات بطريقة شجرية تفاعلية جذابة في بستان المعرفة.";
+    let jsonLdScripts = "";
+
+    const categoriesList = ["self-development", "psychology", "children", "sociology"];
+    const catNames: Record<string, string> = {
+      "self-development": "تطوير الذات",
+      "psychology": "علم النفس",
+      "children": "كتب الأطفال",
+      "sociology": "علم الاجتماع",
+    };
+
+    if (parts.length === 2) {
+      const [category, bookId] = parts;
+      const books = getAllBooks();
+      const book = books.find((b) => b.id === bookId);
+      if (book) {
+        title = `ملخص ${book.title} | شجرة معرفة تفاعلية - بستان المعرفة`;
+        description = `اكتشف زبدة كتاب ${book.title} ل${book.author} في شجرة تفاعلية. ${book.essence.replace(/"/g, '&quot;')}`;
+
+        const host = req.get("host") || "ais-pre-cg7m4hwtvtfvwsvcysh5db-287964971170.europe-west2.run.app";
+        const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+        const bookUrl = `${protocol}://${host}/${category}/${bookId}`;
+        const catUrl = `${protocol}://${host}/${category}`;
+        const homeUrl = `${protocol}://${host}/`;
+
+        // 1. JSON-LD Book Schema (Requirement 2)
+        const bookSchema = {
+          "@context": "https://schema.org",
+          "@type": "Book",
+          "@id": bookUrl,
+          "name": book.title,
+          "author": {
+            "@type": "Person",
+            "name": book.author,
+          },
+          "description": book.essence,
+          "genre": catNames[category] || category,
+        };
+
+        // 2. JSON-LD BreadcrumbList Schema (Requirement 7)
+        const breadcrumbSchema = {
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "بستان المعرفة",
+              "item": homeUrl,
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "name": catNames[category] || category,
+              "item": catUrl,
+            },
+            {
+              "@type": "ListItem",
+              "position": 3,
+              "name": book.title,
+              "item": bookUrl,
+            },
+          ],
+        };
+
+        jsonLdScripts = `
+    <script type="application/ld+json">
+    ${JSON.stringify(bookSchema)}
+    </script>
+    <script type="application/ld+json">
+    ${JSON.stringify(breadcrumbSchema)}
+    </script>
+        `;
+      }
+    } else if (parts.length === 1 && categoriesList.includes(parts[0])) {
+      const category = parts[0];
+      const catName = catNames[category] || category;
+      title = `قسم ${catName} | بستان المعرفة`;
+      description = `تصفح ملخصات كتب ${catName} على هيئة أشجار تفاعلية ومسارات تأمل ثرية في بستان المعرفة.`;
+
+      const host = req.get("host") || "ais-pre-cg7m4hwtvtfvwsvcysh5db-287964971170.europe-west2.run.app";
+      const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      const catUrl = `${protocol}://${host}/${category}`;
+      const homeUrl = `${protocol}://${host}/`;
+
+      const breadcrumbSchema = {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "بستان المعرفة",
+            "item": homeUrl,
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": catName,
+            "item": catUrl,
+          },
+        ],
+      };
+
+      jsonLdScripts = `
+    <script type="application/ld+json">
+    ${JSON.stringify(breadcrumbSchema)}
+    </script>
+      `;
+    }
+
+    if (html.includes("<title>")) {
+      html = html.replace(/<title>.*?<\/title>/, `<title>${title}</title>`);
+    } else {
+      html = html.replace("</head>", `<title>${title}</title>\n</head>`);
+    }
+
+    const descMetaTag = `<meta name="description" content="${description}" />`;
+    if (html.includes('<meta name="description"')) {
+      html = html.replace(/<meta name="description"[^>]*>/, descMetaTag);
+    } else {
+      html = html.replace("</head>", `${descMetaTag}\n</head>`);
+    }
+
+    if (jsonLdScripts) {
+      html = html.replace("</head>", `${jsonLdScripts}\n</head>`);
+    }
+
+    res.send(html);
+  } catch (error) {
+    console.error("Error serving SPA with SEO:", error);
+    res.sendFile(htmlPath);
+  }
+}
+
 // Lazy initialization of GoogleGenAI
 let aiClient: GoogleGenAI | null = null;
 
@@ -37,48 +234,7 @@ async function startServer() {
   // 0. API: Dynamically retrieve all book JSON files from the subdirectories under /data/
   app.get("/api/books", async (req, res) => {
     try {
-      const dataRootDir = path.join(process.cwd(), "data");
-      const booksData = [];
-
-      // Ensure data directory exists
-      if (!fs.existsSync(dataRootDir)) {
-        fs.mkdirSync(dataRootDir, { recursive: true });
-      }
-
-      // Read all categories directories
-      const categories = fs.readdirSync(dataRootDir, { withFileTypes: true });
-
-      for (const cat of categories) {
-        if (cat.isDirectory()) {
-          const categoryPath = path.join(dataRootDir, cat.name);
-          const files = fs.readdirSync(categoryPath);
-
-          for (const file of files) {
-            if (file.endsWith(".json")) {
-              try {
-                const filePath = path.join(categoryPath, file);
-                const content = fs.readFileSync(filePath, "utf-8");
-                const parsed = JSON.parse(content);
-                parsed.category = cat.name; // Keep track of the folder category
-                booksData.push(parsed);
-              } catch (e) {
-                console.error(`Error parsing file ${file} in ${cat.name}:`, e);
-              }
-            }
-          }
-        } else if (cat.isFile() && cat.name.endsWith(".json")) {
-          try {
-            const filePath = path.join(dataRootDir, cat.name);
-            const content = fs.readFileSync(filePath, "utf-8");
-            const parsed = JSON.parse(content);
-            parsed.category = "general";
-            booksData.push(parsed);
-          } catch (e) {
-            console.error(`Error parsing file ${cat.name} in data root:`, e);
-          }
-        }
-      }
-
+      const booksData = getAllBooks();
       res.json(booksData);
     } catch (error: any) {
       console.error("Error loading books directory:", error);
@@ -245,18 +401,91 @@ async function startServer() {
     }
   });
 
+  // Sitemap.xml (Requirement 3)
+  app.get("/sitemap.xml", (req, res) => {
+    try {
+      const host = req.get("host") || "ais-pre-cg7m4hwtvtfvwsvcysh5db-287964971170.europe-west2.run.app";
+      const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      const categories = ["self-development", "psychology", "children", "sociology"];
+      let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+      xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+      // Home
+      xml += `  <url>\n    <loc>${baseUrl}/</loc>\n    <changefreq>daily</changefreq>\n    <priority>1.0</priority>\n  </url>\n`;
+
+      // Categories
+      categories.forEach(cat => {
+        xml += `  <url>\n    <loc>${baseUrl}/${cat}</loc>\n    <changefreq>weekly</changefreq>\n    <priority>0.8</priority>\n  </url>\n`;
+      });
+
+      // Books
+      const booksList = getAllBooks();
+      booksList.forEach(book => {
+        const cat = book.category || "self-development";
+        xml += `  <url>\n    <loc>${baseUrl}/${cat}/${book.id}</loc>\n    <changefreq>monthly</changefreq>\n    <priority>0.6</priority>\n  </url>\n`;
+      });
+
+      xml += `</urlset>`;
+      res.header("Content-Type", "application/xml");
+      res.send(xml);
+    } catch (e: any) {
+      console.error("Error generating sitemap.xml:", e);
+      res.status(500).send("Error generating sitemap");
+    }
+  });
+
+  // Robots.txt (Requirement 6)
+  app.get("/robots.txt", (req, res) => {
+    try {
+      const host = req.get("host") || "ais-pre-cg7m4hwtvtfvwsvcysh5db-287964971170.europe-west2.run.app";
+      const protocol = req.secure || req.headers["x-forwarded-proto"] === "https" ? "https" : "http";
+      const baseUrl = `${protocol}://${host}`;
+
+      res.header("Content-Type", "text/plain");
+      res.send(`User-agent: *\nAllow: /\nSitemap: ${baseUrl}/sitemap.xml\n`);
+    } catch (e: any) {
+      res.status(500).send("Error generating robots.txt");
+    }
+  });
+
   // 3. Vite development vs static production server integration
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
+
+    // Intercept page views for dev meta tag insertion
+    app.get("*", async (req, res, next) => {
+      const isHtmlRequest = req.headers.accept?.includes("text/html");
+      if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
+        return next();
+      }
+      try {
+        await serveSpaWithSeo(req, res, path.join(process.cwd(), "index.html"), vite);
+      } catch (e) {
+        next(e);
+      }
+    });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+    
+    // Serve static files, but bypass index.html so our custom wildcard route can inject meta tags
+    app.use(express.static(distPath, { index: false }));
+
+    app.get("*", async (req, res) => {
+      const isHtmlRequest = req.headers.accept?.includes("text/html") || req.path === "/";
+      if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
+        const filePath = path.join(distPath, req.path);
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          return res.sendFile(filePath);
+        }
+      }
+      await serveSpaWithSeo(req, res, path.join(distPath, "index.html"));
     });
   }
 
