@@ -3,13 +3,7 @@
   "functions": {
     "api/*.ts": {
       "maxDuration": 30,
-      "memory": 2048,
-      "includeFiles": [
-        "data/**",
-        "dist/**",
-        "index.html",
-        "package.json"
-      ]
+      "memory": 2048
     }
   },
   "builds": [
