@@ -33,3 +33,15 @@ export interface ConsciousnessLevel {
   description: string;
   color: string;
 }
+
+export interface LibraryInProgressBook {
+  bookId: string;
+  progress: string;
+  lastOpened: string;
+}
+
+export interface UserLibrary {
+  finished: string[];
+  toRead: string[];
+  inProgress: LibraryInProgressBook[];
+}

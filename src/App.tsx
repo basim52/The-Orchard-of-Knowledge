@@ -15,7 +15,7 @@ import {
   RefreshCw,
   Info
 } from 'lucide-react';
-import { BookData, LeafDetail } from './types';
+import { BookData, LeafDetail, UserLibrary, LibraryInProgressBook } from './types';
 import { BACKUP_BOOKS } from './defaultBooks';
 import BookTree from './components/BookTree';
 import ConsciousnessMap from './components/ConsciousnessMap';
@@ -73,6 +73,55 @@ export default function App() {
 
   // Unlocked Spoils (Quotes) per book
   const [unlockedLevel, setUnlockedLevel] = useState<Record<string, number>>({}); // bookId -> number of unlocked quotes index
+
+  // Personal Library state (My Library 📚)
+  const [libraryState, setLibraryState] = useState<UserLibrary>({
+    finished: [],
+    toRead: [],
+    inProgress: []
+  });
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [libActiveTab, setLibActiveTab] = useState<'finished' | 'toRead' | 'inProgress'>('inProgress');
+  const [editingBookIdInLib, setEditingBookIdInLib] = useState<string | null>(null);
+  const [editingProgressVal, setEditingProgressVal] = useState('');
+
+  // Inline progress update state inside active book tree view
+  const [showInlineProgressInput, setShowInlineProgressInput] = useState(false);
+  const [inlineEditingBookId, setInlineEditingBookId] = useState<string | null>(null);
+  const [inlineProgressText, setInlineProgressText] = useState('');
+
+  // Move book in library helper
+  const moveBookToStatus = (bookId: string, status: 'toRead' | 'inProgress' | 'finished', currentProgressVal?: string) => {
+    setLibraryState(prev => {
+      // Filter out from all categories first to maintain strict mutual exclusivity
+      const cleanToRead = prev.toRead.filter(id => id !== bookId);
+      const cleanFinished = prev.finished.filter(id => id !== bookId);
+      const cleanInProgress = prev.inProgress.filter(item => item.bookId !== bookId);
+
+      if (status === 'toRead') {
+        cleanToRead.push(bookId);
+      } else if (status === 'finished') {
+        cleanFinished.push(bookId);
+      } else if (status === 'inProgress') {
+        const existingInProgress = prev.inProgress.find(item => item.bookId === bookId);
+        const progressText = currentProgressVal !== undefined ? currentProgressVal : (existingInProgress?.progress || 'البداية');
+        cleanInProgress.push({
+          bookId,
+          progress: progressText,
+          lastOpened: new Date().toISOString().split('T')[0]
+        });
+      }
+
+      const updated = {
+        finished: cleanFinished,
+        toRead: cleanToRead,
+        inProgress: cleanInProgress
+      };
+
+      localStorage.setItem('userLibrary', JSON.stringify(updated));
+      return updated;
+    });
+  };
 
   // Firebase Auth & loading States
   const [user, setUser] = useState<User | null>(null);
@@ -205,10 +254,23 @@ export default function App() {
     const savedChallenges = localStorage.getItem('garden_challenges');
     const savedReflections = localStorage.getItem('garden_reflections');
     const savedUnlocked = localStorage.getItem('garden_unlocked_quotes');
+    const savedLibrary = localStorage.getItem('userLibrary');
 
     if (savedChallenges) setCompletedChallenges(JSON.parse(savedChallenges));
     if (savedReflections) setReflections(JSON.parse(savedReflections));
     if (savedUnlocked) setUnlockedLevel(JSON.parse(savedUnlocked));
+    if (savedLibrary) {
+      try {
+        const parsed = JSON.parse(savedLibrary);
+        setLibraryState({
+          finished: Array.isArray(parsed.finished) ? parsed.finished : [],
+          toRead: Array.isArray(parsed.toRead) ? parsed.toRead : [],
+          inProgress: Array.isArray(parsed.inProgress) ? parsed.inProgress : []
+        });
+      } catch (e) {
+        console.error("Failed to parse userLibrary", e);
+      }
+    }
   }, []);
 
   // Sync helpers with cloud awareness
@@ -467,6 +529,9 @@ export default function App() {
   const reflectionsCt = reflections[bookId]?.length || 0;
   const quotesUnlocked = unlockedLevel[bookId] || 0;
 
+  const isInLibInProgress = libraryState.inProgress.some(item => item.bookId === bookId);
+  const currentLibInProgressBook = libraryState.inProgress.find(item => item.bookId === bookId);
+
   return (
     <div className="min-h-screen bg-[#fcfbf7] font-sans antialiased text-[#2c3531] flex flex-col justify-between">
       
@@ -495,6 +560,16 @@ export default function App() {
                 <span>العودة للبستان</span>
               </button>
             )}
+
+            <button 
+              onClick={() => {
+                setShowLibrary(true);
+                setLibActiveTab('inProgress');
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif font-bold text-emerald-950 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors border border-amber-200/50 cursor-pointer shadow-xs whitespace-nowrap select-none"
+            >
+              <span>مكتبتي 📚</span>
+            </button>
             
             {isLoadingAuth ? (
               <span className="text-xs text-slate-400 font-serif flex items-center gap-1 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-full">
@@ -806,25 +881,133 @@ export default function App() {
             <div className="space-y-8">
               
               {/* Poetic Book Header Banner */}
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white rounded-3xl border border-emerald-100/50 p-6 md:p-8 gap-4 shadow-xs">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-2 text-xs text-emerald-800 font-serif font-black">
-                    <span>بستان الكتاب</span>
-                    <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full"></span>
-                    <span>{selectedBook.author}</span>
+              <div className="flex flex-col bg-white rounded-3xl border border-emerald-100/50 p-6 md:p-8 gap-4 shadow-xs">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 w-full">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-xs text-emerald-800 font-serif font-black">
+                      <span>بستان الكتاب</span>
+                      <span className="w-1.5 h-1.5 bg-emerald-600 rounded-full"></span>
+                      <span>{selectedBook.author}</span>
+                    </div>
+                    <h2 className="text-2xl md:text-3xl font-serif font-black text-emerald-950 flex items-center gap-2">
+                      <span>شجرة:</span>
+                      <span>{selectedBook.title}</span>
+                    </h2>
                   </div>
-                  <h2 className="text-2xl md:text-3xl font-serif font-black text-emerald-950 flex items-center gap-2">
-                    <span>شجرة:</span>
-                    <span>{selectedBook.title}</span>
-                  </h2>
+
+                  <div className="flex items-center gap-2 bg-emerald-50/50 border border-emerald-150 px-4 py-2 rounded-2xl text-xs text-emerald-990 font-serif shrink-0">
+                    <span className="font-bold">معدل سقياك:</span>
+                    <span>{reflectionsCt} تأمل محرز</span>
+                    <span className="opacity-40">|</span>
+                    <span>{completedChCt}/7 أيام تحدي</span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2 bg-emerald-50/50 border border-emerald-150 px-4 py-2 rounded-2xl text-xs text-emerald-990 font-serif">
-                  <span className="font-bold">معدل سقياك:</span>
-                  <span>{reflectionsCt} تأمل محرز</span>
-                  <span className="opacity-40">|</span>
-                  <span>{completedChCt}/7 أيام تحدي</span>
+                {/* Library controls section */}
+                <div className="flex flex-wrap gap-2 mt-2 pt-4 border-t border-slate-100 w-full justify-start items-center">
+                  <span className="text-xs font-serif font-black text-[#5c6861] ml-2">نظام القراءة 📚:</span>
+
+                  {/* 1. Add to / status of: ssaqra7ha */}
+                  <button
+                    onClick={() => moveBookToStatus(selectedBook.id, 'toRead')}
+                    className={`px-3 py-1.5 text-xs font-serif font-bold rounded-xl border transition-all duration-200 flex items-center gap-1 cursor-pointer select-none active:scale-95 duration-100 ${
+                      libraryState.toRead.includes(selectedBook.id)
+                        ? 'bg-amber-100/70 text-amber-900 border-amber-300 shadow-tiny'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-amber-50/50 hover:text-amber-800'
+                    }`}
+                  >
+                    <span>📌</span>
+                    <span>{libraryState.toRead.includes(selectedBook.id) ? 'في قائمة سأقرأها' : 'أضف إلى سأقرأها'}</span>
+                  </button>
+
+                  {/* 2. Start / update progress: in progress */}
+                  {isInLibInProgress ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setInlineEditingBookId(selectedBook.id);
+                          setInlineProgressText(currentLibInProgressBook?.progress || '');
+                          setShowInlineProgressInput(true);
+                        }}
+                        className="px-3 py-1.5 text-xs font-serif font-bold rounded-xl border bg-blue-50 text-blue-900 border-blue-250 hover:bg-dashblue-100 transition-all cursor-pointer flex items-center gap-1 select-none active:scale-95"
+                      >
+                        <span>📖</span>
+                        <span>حدّث التقدم</span>
+                      </button>
+
+                      {currentLibInProgressBook?.progress && (
+                        <span className="text-xs font-serif font-bold text-blue-800 bg-blue-50/50 px-2.5 py-1 rounded-xl border border-blue-100 max-w-[200px] truncate" title={currentLibInProgressBook.progress}>
+                          التقدم: {currentLibInProgressBook.progress}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        moveBookToStatus(selectedBook.id, 'inProgress');
+                        setInlineEditingBookId(selectedBook.id);
+                        setInlineProgressText('');
+                        setShowInlineProgressInput(true);
+                      }}
+                      className="px-3 py-1.5 text-xs font-serif font-bold rounded-xl border bg-white text-slate-600 border-slate-200 hover:bg-blue-50/50 hover:text-blue-800 transition-all cursor-pointer flex items-center gap-1 select-none active:scale-95"
+                    >
+                      <span>📖</span>
+                      <span>ابدأ القراءة</span>
+                    </button>
+                  )}
+
+                  {/* 3. Completed: finished */}
+                  <button
+                    onClick={() => moveBookToStatus(selectedBook.id, 'finished')}
+                    className={`px-3 py-1.5 text-xs font-serif font-bold rounded-xl border transition-all duration-200 flex items-center gap-1 cursor-pointer select-none active:scale-95 duration-100 ${
+                      libraryState.finished.includes(selectedBook.id)
+                        ? 'bg-emerald-600 text-white border-emerald-700 shadow-tiny'
+                        : 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50 hover:text-emerald-800'
+                    }`}
+                  >
+                    <span>✔️</span>
+                    <span>{libraryState.finished.includes(selectedBook.id) ? 'تم إنهاء الكتاب 🎉' : 'أنهيت الكتاب'}</span>
+                  </button>
                 </div>
+
+                {/* Inline Editing Progress Form */}
+                {showInlineProgressInput && inlineEditingBookId === selectedBook.id && (
+                  <div className="mt-2 bg-blue-50/30 p-4 rounded-2xl border border-blue-100 flex flex-col sm:flex-row items-center gap-3 w-full animate-in fade-in slide-in-from-top-2 duration-150">
+                    <div className="flex-grow w-full text-right">
+                      <label className="text-[10px] font-bold text-blue-700/80 uppercase block mb-1">تسجيل تقدم قراءتك الحالي (الصفحة، الفصل، الفرع، أو النقطة):</label>
+                      <input
+                        type="text"
+                        value={inlineProgressText}
+                        onChange={(e) => setInlineProgressText(e.target.value)}
+                        placeholder="مثال: الفصل الثاني - الورقة الثالثة"
+                        className="w-full text-xs bg-white border border-slate-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            moveBookToStatus(selectedBook.id, 'inProgress', inlineProgressText);
+                            setShowInlineProgressInput(false);
+                          }
+                        }}
+                      />
+                    </div>
+                    <div className="flex gap-2 w-full sm:w-auto self-end">
+                      <button
+                        onClick={() => {
+                          moveBookToStatus(selectedBook.id, 'inProgress', inlineProgressText);
+                          setShowInlineProgressInput(false);
+                        }}
+                        className="flex-1 sm:flex-none px-4 py-2 bg-blue-700 hover:bg-blue-800 text-white rounded-xl text-xs font-serif font-bold transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        حفظ التقدم
+                      </button>
+                      <button
+                        onClick={() => setShowInlineProgressInput(false)}
+                        className="flex-1 sm:flex-none px-4 py-2 bg-white border border-slate-200 text-slate-500 rounded-xl text-xs font-serif font-bold hover:bg-slate-50 transition-colors cursor-pointer whitespace-nowrap"
+                      >
+                        إلغاء
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* BOOK SUMMARY IN 30 SECONDS */}
@@ -1172,6 +1355,318 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* PERSONAL LIBRARY OVERLAY MODAL */}
+      {showLibrary && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" id="library-modal-overlay">
+          <div className="bg-[#fcfbf7] border border-emerald-100 w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Header */}
+            <div className="p-5 border-b border-emerald-100 flex items-center justify-between text-right">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📚</span>
+                <h3 className="text-lg font-serif font-black text-emerald-950">مكتبتي الشخصية</h3>
+              </div>
+              <button
+                onClick={() => setShowLibrary(false)}
+                className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-500 cursor-pointer select-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-slate-100 pb-0.5 px-4 bg-slate-50/50">
+              {[
+                { id: 'inProgress', label: 'قيد القراءة', icon: '📖' },
+                { id: 'toRead', label: 'سأقرأها', icon: '📌' },
+                { id: 'finished', label: 'تمت قراءتها', icon: '✔️' }
+              ].map((tab) => {
+                let count = 0;
+                if (tab.id === 'inProgress') count = libraryState.inProgress.length;
+                else if (tab.id === 'toRead') count = libraryState.toRead.length;
+                else if (tab.id === 'finished') count = libraryState.finished.length;
+
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setLibActiveTab(tab.id as any);
+                      setEditingBookIdInLib(null);
+                    }}
+                    className={`flex-1 py-3 text-center text-xs md:text-sm font-serif font-bold border-b-2 transition-all cursor-pointer flex items-center justify-center gap-1.5 select-none ${
+                      libActiveTab === tab.id
+                        ? 'border-emerald-700 text-emerald-900 font-black'
+                        : 'border-transparent text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <span>{tab.icon}</span>
+                    <span>{tab.label}</span>
+                    <span className="bg-slate-200/60 text-slate-755 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold leading-none">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* List Body */}
+            <div className="p-6 overflow-y-auto flex-grow space-y-4">
+              
+              {libActiveTab === 'inProgress' && (
+                <div className="space-y-4">
+                  {libraryState.inProgress.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 font-serif text-sm">
+                      <p className="text-3xl mb-2">📖</p>
+                      <p>لا توجد كتب قيد القراءة حالياً.</p>
+                      <p className="text-xs text-slate-400 mt-1">اختر كتاباً من الرف وابدأ في المرافقة والسقاية.</p>
+                    </div>
+                  ) : (
+                    libraryState.inProgress.map((item) => {
+                      const book = books.find(b => b.id === item.bookId);
+                      if (!book) return null;
+                      const isEditing = editingBookIdInLib === item.bookId;
+
+                      return (
+                        <div key={item.bookId} className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col gap-3">
+                          <div className="flex gap-4 items-start text-right">
+                            {/* Styled mini Cover */}
+                            <div 
+                              onClick={() => {
+                                handleSelectBook(book);
+                                setShowLibrary(false);
+                              }}
+                              className={`w-14 h-20 rounded-lg shadow-md border-r-4 relative overflow-hidden flex flex-col justify-between p-2 shrink-0 cursor-pointer ${book.cover}`}
+                            >
+                              <div className="absolute top-0 right-0 w-1 h-full bg-black/15"></div>
+                              <span className="text-[8px] opacity-75">🪶</span>
+                              <h5 className="text-[10px] font-serif font-black leading-tight select-none truncate-two-lines text-white">{book.title}</h5>
+                              <span className="text-[8px] opacity-60 self-end">🌳</span>
+                            </div>
+
+                            {/* Info & Actions */}
+                            <div className="flex-grow space-y-1">
+                              <h4 className="font-serif font-black text-sm text-slate-800 cursor-pointer hover:text-emerald-800" onClick={() => { handleSelectBook(book); setShowLibrary(false); }}>
+                                {book.title}
+                              </h4>
+                              <p className="text-xs text-slate-400 font-serif">{book.author}</p>
+                              
+                              <div className="text-xs text-slate-500 font-serif flex items-center gap-4 pt-1 flex-wrap">
+                                <span>
+                                  التقدم: <strong className="text-blue-800">{item.progress || 'لم يحدد'}</strong>
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  آخر فتح: {item.lastOpened || '-'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Inline Edit Form */}
+                          {isEditing ? (
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-col sm:flex-row items-center gap-2 animate-in fade-in duration-150">
+                              <input
+                                type="text"
+                                value={editingProgressVal}
+                                onChange={(e) => setEditingProgressVal(e.target.value)}
+                                placeholder="مثال: الصفحة 23 - الفصل الثاني"
+                                className="w-full text-xs bg-white border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 text-right"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    moveBookToStatus(item.bookId, 'inProgress', editingProgressVal);
+                                    setEditingBookIdInLib(null);
+                                  }
+                                }}
+                              />
+                              <div className="flex gap-1.5 w-full sm:w-auto self-end">
+                                <button
+                                  onClick={() => {
+                                    moveBookToStatus(item.bookId, 'inProgress', editingProgressVal);
+                                    setEditingBookIdInLib(null);
+                                  }}
+                                  className="flex-1 sm:flex-none px-3 py-1.5 bg-blue-700 text-white rounded-lg text-xs font-serif font-bold hover:bg-blue-800 cursor-pointer whitespace-nowrap"
+                                >
+                                  حفظ
+                                </button>
+                                <button
+                                  onClick={() => setEditingBookIdInLib(null)}
+                                  className="flex-1 sm:flex-none px-3 py-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg text-xs font-serif font-bold hover:bg-slate-50 cursor-pointer whitespace-nowrap"
+                                >
+                                  إلغاء
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2 pt-2 border-t border-slate-50/80">
+                              <button
+                                onClick={() => {
+                                  // Update lastOpened & load book
+                                  moveBookToStatus(item.bookId, 'inProgress', item.progress);
+                                  handleSelectBook(book);
+                                  setShowLibrary(false);
+                                }}
+                                className="px-3 py-1.5 bg-emerald-50 text-emerald-850 border border-emerald-100/60 rounded-xl text-xs font-serif font-bold hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1 select-none"
+                              >
+                                <span>🚀</span>
+                                <span>استئناف القراءة</span>
+                              </button>
+                              
+                              <button
+                                onClick={() => {
+                                  setEditingBookIdInLib(item.bookId);
+                                  setEditingProgressVal(item.progress || '');
+                                }}
+                                className="px-3 py-1.5 bg-slate-50 text-slate-600 border border-slate-200/50 rounded-xl text-xs font-serif font-bold hover:bg-slate-100 transition-colors cursor-pointer select-none"
+                              >
+                                ⚙️ تعديل التقدم
+                              </button>
+
+                              <button
+                                onClick={() => moveBookToStatus(item.bookId, 'finished')}
+                                className="px-3 py-1.5 bg-white text-slate-550 border border-slate-200 rounded-xl text-xs font-serif font-bold hover:bg-emerald-50 hover:text-emerald-800 transition-colors cursor-pointer mr-auto select-none"
+                              >
+                                ✔️ أنهيت الكتاب
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {libActiveTab === 'toRead' && (
+                <div className="space-y-4">
+                  {libraryState.toRead.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 font-serif text-sm">
+                      <p className="text-3xl mb-2">📌</p>
+                      <p>لا توجد كتب في قائمة سأقرأها.</p>
+                      <p className="text-xs text-slate-400 mt-1">اضغط زر "أضف إلى سأقرأها" في صفحة أي كتاب ليرسو هنا.</p>
+                    </div>
+                  ) : (
+                    libraryState.toRead.map((id) => {
+                      const book = books.find(b => b.id === id);
+                      if (!book) return null;
+
+                      return (
+                        <div key={id} className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div className="flex gap-4 items-center text-right">
+                            {/* Styled mini Cover */}
+                            <div 
+                              onClick={() => {
+                                handleSelectBook(book);
+                                setShowLibrary(false);
+                              }}
+                              className={`w-12 h-16 rounded-lg shadow-md border-r-4 relative overflow-hidden flex flex-col justify-between p-1.5 shrink-0 cursor-pointer ${book.cover}`}
+                            >
+                              <div className="absolute top-0 right-0 w-0.5 h-full bg-black/15"></div>
+                              <span className="text-[7px]">🪶</span>
+                              <h5 className="text-[9px] font-serif font-black leading-tight select-none truncate-two-lines text-white">{book.title}</h5>
+                              <span className="text-[7px] self-end">🌳</span>
+                            </div>
+
+                            <div className="space-y-0.5 text-right">
+                              <h4 className="font-serif font-black text-sm text-slate-800 cursor-pointer hover:text-emerald-800" onClick={() => { handleSelectBook(book); setShowLibrary(false); }}>
+                                {book.title}
+                              </h4>
+                              <p className="text-xs text-slate-400 font-serif">{book.author}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 w-full sm:w-auto justify-end">
+                            <button
+                              onClick={() => moveBookToStatus(id, 'inProgress')}
+                              className="px-3 py-1.5 bg-blue-50 text-blue-850 hover:bg-blue-100 border border-blue-100/60 rounded-xl text-xs font-serif font-bold transition-colors cursor-pointer flex items-center gap-1 select-none"
+                            >
+                              <span>📖</span>
+                              <span>ابدأ القراءة</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                handleSelectBook(book);
+                                setShowLibrary(false);
+                              }}
+                              className="px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-serif font-bold transition-colors cursor-pointer select-none"
+                            >
+                              🔍 استكشف الشجرة
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {libActiveTab === 'finished' && (
+                <div className="space-y-4">
+                  {libraryState.finished.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 font-serif text-sm">
+                      <p className="text-3xl mb-2">✔️</p>
+                      <p>لا توجد كتب مقروءة بعد أو مكتملة.</p>
+                      <p className="text-xs text-slate-400 mt-1">اضغط زر "أنهيت الكتاب" لترحيل الكتب المكتملة هنا بفخر.</p>
+                    </div>
+                  ) : (
+                    libraryState.finished.map((id) => {
+                      const book = books.find(b => b.id === id);
+                      if (!book) return null;
+
+                      return (
+                        <div key={id} className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                          <div className="flex gap-4 items-center text-right">
+                            {/* Styled mini Cover */}
+                            <div 
+                              onClick={() => {
+                                handleSelectBook(book);
+                                setShowLibrary(false);
+                              }}
+                              className={`w-12 h-16 rounded-lg shadow-md border-r-4 relative overflow-hidden flex flex-col justify-between p-1.5 shrink-0 cursor-pointer ${book.cover}`}
+                            >
+                              <div className="absolute top-0 right-0 w-0.5 h-full bg-black/15"></div>
+                              <span className="text-[7px]">🪶</span>
+                              <h5 className="text-[9px] font-serif font-black leading-tight select-none truncate-two-lines text-white">{book.title}</h5>
+                              <span className="text-[7px] self-end">🌳</span>
+                            </div>
+
+                            <div className="space-y-0.5 text-right">
+                              <h4 className="font-serif font-black text-sm text-slate-800 cursor-pointer hover:text-emerald-800" onClick={() => { handleSelectBook(book); setShowLibrary(false); }}>
+                                {book.title}
+                              </h4>
+                              <p className="text-xs text-slate-400 font-serif">{book.author}</p>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-2 w-full sm:w-auto justify-end items-center">
+                            <span className="px-2.5 py-1 bg-emerald-50 text-emerald-800 rounded-xl text-[10px] font-serif font-bold border border-emerald-100 flex items-center gap-1 shrink-0">
+                              <span>🎉</span>
+                              <span>تمت القراءة بنجاح</span>
+                            </span>
+                            <button
+                              onClick={() => {
+                                handleSelectBook(book);
+                                setShowLibrary(false);
+                              }}
+                              className="px-3 py-1.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-serif font-bold transition-colors cursor-pointer select-none"
+                            >
+                              🔍 استكشف الشجرة
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* Footer info label */}
+            <div className="p-4 bg-slate-50/80 border-t border-emerald-100/40 text-[10px] font-serif text-slate-400 text-center">
+              يتم حفظ التقدم تلقائياً وبأمان في بستان جهازك اليدوي والمستقل.
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );
