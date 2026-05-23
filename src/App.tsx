@@ -651,7 +651,7 @@ export default function App() {
       </header>
 
       {/* 2. CORE CONTENT AREA */}
-      <main className="flex-grow max-w-7xl w-full mx-auto px-4 md:px-8 py-8">
+      <main className="flex-grow max-w-7xl w-full mx-auto px-4 md:px-8 pt-8 pb-28">
         
         {view === 'home' ? (
           /* =======================================
@@ -1375,11 +1375,13 @@ export default function App() {
       </main>
 
       {/* 3. APP FOOTER */}
-      <footer className="bg-white border-t border-emerald-100/40 mt-12 py-6 text-center text-xs text-slate-400 font-serif">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-3">
-          <p>بستان المعرفة © {new Date().getFullYear()} مروي ببركة الأقدار وصدق الساعين</p>
-          <div className="flex gap-4">
-            <span>"بستانك يزكو بنقاء صدقك الداخلي"</span>
+      <footer className="fixed bottom-0 left-0 right-0 z-40 bg-[#fcfbf7]/80 backdrop-blur-md border-t border-emerald-100/25 py-2.5 shadow-[0_-2px_12px_rgba(0,0,0,0.02)]">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <div className="text-[11px] font-serif text-slate-500/90 leading-relaxed">
+            <p className="font-bold text-emerald-850">فكرة وبرمجة</p>
+            <p className="mt-0.5 text-slate-700">باسم آل خليل</p>
+            <p className="mt-0.5 text-slate-500 font-sans">basim5252@gmail.com</p>
+            <p className="mt-0.5 text-slate-400">بمساعدة AI Gemini و AI DeepSeek</p>
           </div>
         </div>
       </footer>
