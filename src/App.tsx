@@ -156,9 +156,28 @@ export default function App() {
       setIsLoadingAuth(false);
       
       if (currentUser) {
+        // Safe timeout helpers to prevent slow connections from freezing the App
+        const getDocWithTimeout = (ref: any): Promise<any> => {
+          return Promise.race([
+            getDoc(ref),
+            new Promise<any>((_, reject) => 
+              setTimeout(() => reject(new Error('Firestore getDoc timeout')), 2500)
+            )
+          ]);
+        };
+
+        const getDocsWithTimeout = (ref: any): Promise<any> => {
+          return Promise.race([
+            getDocs(ref),
+            new Promise<any>((_, reject) => 
+              setTimeout(() => reject(new Error('Firestore getDocs timeout')), 2500)
+            )
+          ]);
+        };
+
         try {
           const pPath = `users/${currentUser.uid}/progress/data`;
-          const pDoc = await getDoc(doc(db, pPath));
+          const pDoc = await getDocWithTimeout(doc(db, pPath));
           
           let challenges = completedChallenges;
           let userReflections = reflections;
@@ -199,7 +218,7 @@ export default function App() {
           
           // Also fetch custom books planted by this user
           const cbCollection = collection(db, `users/${currentUser.uid}/customBooks`);
-          const cbSnap = await getDocs(cbCollection);
+          const cbSnap = await getDocsWithTimeout(cbCollection);
           const remoteCustomBooks: BookData[] = [];
           cbSnap.forEach((docSnapshot) => {
             remoteCustomBooks.push(docSnapshot.data() as BookData);
@@ -211,7 +230,16 @@ export default function App() {
           });
           
         } catch (err) {
-          console.error("Error matching profile info: ", err);
+          console.warn("Backend unavailable or connection timed out. Falling back to local offline storage.", err);
+          
+          // Safely load fallback storage data directly to maintain seamless usability
+          const savedChallenges = localStorage.getItem('garden_challenges');
+          const savedReflections = localStorage.getItem('garden_reflections');
+          const savedUnlocked = localStorage.getItem('garden_unlocked_quotes');
+
+          if (savedChallenges) setCompletedChallenges(JSON.parse(savedChallenges));
+          if (savedReflections) setReflections(JSON.parse(savedReflections));
+          if (savedUnlocked) setUnlockedLevel(JSON.parse(savedUnlocked));
         }
       } else {
         // Fallback to offline localStorage on sign out

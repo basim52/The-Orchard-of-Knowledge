@@ -1,10 +1,17 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, User } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, setLogLevel } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
+
+// Set Firestore log level to suppress verbose, non-critical warning logs in sandboxed/iframe environments
+try {
+  setLogLevel('error');
+} catch (e) {
+  console.warn("Unable to set Firestore log-level", e);
+}
 
 // Initialize Services
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
@@ -63,9 +70,14 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 // Verify database connection at startup
 async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    // Race connection test with a fast timeout so it won't block or lag the user session when offline
+    await Promise.race([
+      getDocFromServer(doc(db, 'test', 'connection')),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('the client is offline (connection timeout)')), 2500))
+    ]);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
+    console.warn("Firestore is operating in offline mode. Local state and localStorage will continue to work seamlessly.");
+    if (error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('offline') || error.message.includes('timeout'))) {
       console.error("Please check your Firebase configuration and internet availability.");
     }
   }
