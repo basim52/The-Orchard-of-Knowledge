@@ -225,11 +225,8 @@ function getAi(): GoogleGenAI {
   return aiClient;
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
-
-  app.use(express.json());
+const app = express();
+app.use(express.json());
 
   // 0. API: Dynamically retrieve all book JSON files from the subdirectories under /data/
   app.get("/api/books", async (req, res) => {
@@ -451,47 +448,55 @@ async function startServer() {
   });
 
   // 3. Vite development vs static production server integration
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
+  async function setupViteOrStatic() {
+    if (process.env.NODE_ENV !== "production") {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
 
-    // Intercept page views for dev meta tag insertion
-    app.get("*", async (req, res, next) => {
-      const isHtmlRequest = req.headers.accept?.includes("text/html");
-      if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
-        return next();
-      }
-      try {
-        await serveSpaWithSeo(req, res, path.join(process.cwd(), "index.html"), vite);
-      } catch (e) {
-        next(e);
-      }
-    });
-
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    
-    // Serve static files, but bypass index.html so our custom wildcard route can inject meta tags
-    app.use(express.static(distPath, { index: false }));
-
-    app.get("*", async (req, res) => {
-      const isHtmlRequest = req.headers.accept?.includes("text/html") || req.path === "/";
-      if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
-        const filePath = path.join(distPath, req.path);
-        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-          return res.sendFile(filePath);
+      // Intercept page views for dev meta tag insertion
+      app.get("*", async (req, res, next) => {
+        const isHtmlRequest = req.headers.accept?.includes("text/html");
+        if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
+          return next();
         }
-      }
-      await serveSpaWithSeo(req, res, path.join(distPath, "index.html"));
-    });
+        try {
+          await serveSpaWithSeo(req, res, path.join(process.cwd(), "index.html"), vite);
+        } catch (e) {
+          next(e);
+        }
+      });
+
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), "dist");
+      
+      // Serve static files, but bypass index.html so our custom wildcard route can inject meta tags
+      app.use(express.static(distPath, { index: false }));
+
+      app.get("*", async (req, res) => {
+        const isHtmlRequest = req.headers.accept?.includes("text/html") || req.path === "/";
+        if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
+          const filePath = path.join(distPath, req.path);
+          if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+            return res.sendFile(filePath);
+          }
+        }
+        await serveSpaWithSeo(req, res, path.join(distPath, "index.html"));
+      });
+    }
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[حكيم البستان] بوابات بستان الحكمة مشرعة بسلام على المرفأ: http://localhost:${PORT}`);
+  setupViteOrStatic().then(() => {
+    if (!process.env.VERCEL) {
+      const PORT = Number(process.env.PORT) || 3000;
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`[حكيم البستان] بوابات بستان الحكمة مشرعة بسلام على المرفأ: http://localhost:${PORT}`);
+      });
+    }
+  }).catch((err) => {
+    console.error("Error setting up server routes:", err);
   });
-}
 
-startServer();
+  export default app;
