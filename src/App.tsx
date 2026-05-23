@@ -529,29 +529,29 @@ export default function App() {
               <div className="bg-gradient-to-br from-slate-50 to-[#fbfbf9] rounded-3xl border border-slate-200/40 p-6 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 shadow-inner">
                 
                 <div className="lg:col-span-5 space-y-3 border-l border-slate-200/60 pl-2 lg:pl-6 text-right">
-                  <div className="inline-flex bg-slate-100 text-slate-700 text-[10px] px-2.5 py-0.5 rounded-full font-bold">
+                  <div className="inline-flex bg-slate-100 text-slate-700 text-xs md:text-sm px-3 py-1 rounded-full font-bold">
                     الكتاب في 30 ثانية
                   </div>
-                  <h4 className="text-md font-serif font-bold text-slate-800 flex items-center gap-1 justify-end">
+                  <h4 className="text-base md:text-lg font-serif font-bold text-slate-800 flex items-center gap-1.5 justify-end">
                     <span>الجوهر الثابت والشفرة للعيش</span>
                     <span>🌾</span>
                   </h4>
-                  <p className="text-xs text-slate-600 leading-relaxed font-serif bg-white p-4 rounded-xl border border-slate-100">
+                  <p className="text-sm md:text-base text-slate-705 leading-relaxed font-serif bg-white p-4 rounded-xl border border-slate-100">
                     "{selectedBook.essence}"
                   </p>
                 </div>
 
-                <div className="lg:col-span-7 space-y-2">
-                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest text-right">
+                <div className="lg:col-span-7 space-y-3">
+                  <h4 className="text-xs md:text-sm font-bold text-slate-500 uppercase tracking-widest text-right">
                     ثلاث وثبات فكرية كبرى للشجرة
                   </h4>
                   <div className="space-y-2.5">
                     {selectedBook.mindsetShifts.slice(0, 3).map((shift, idx) => (
-                      <div key={idx} className="flex gap-3 bg-white p-3 rounded-xl border border-slate-100/60 text-right items-start">
-                        <div className="flex-grow text-[11.5px] text-slate-700 font-serif leading-relaxed">
+                      <div key={idx} className="flex gap-3 bg-white p-3.5 rounded-xl border border-slate-100/60 text-right items-start">
+                        <div className="flex-grow text-xs md:text-sm text-slate-750 font-serif leading-relaxed">
                           {shift}
                         </div>
-                        <div className="w-6 h-6 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-[10px] font-bold text-emerald-800 select-none shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-xs font-bold text-emerald-800 select-none shrink-0">
                           {idx + 1}
                         </div>
                       </div>
@@ -638,36 +638,36 @@ export default function App() {
                         <div className="bg-[#fcfbf9] rounded-2xl border-2 border-emerald-700/60 p-6 space-y-6 shadow-md relative overflow-hidden">
                           
                           {/* Top Tag */}
-                          <div className="flex justify-between items-center text-xs pb-3 border-b border-emerald-100/50">
+                          <div className="flex justify-between items-center text-sm pb-3 border-b border-emerald-100/50">
                             <span className="text-emerald-800 font-serif font-bold">{activeBranch}</span>
-                            <span className="bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-sm font-bold text-[10px]">الورقة المعرفية</span>
+                            <span className="bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-sm font-bold text-xs">الورقة المعرفية</span>
                           </div>
 
                           <div className="space-y-4">
-                            <h4 className="text-lg font-serif font-black text-emerald-950">
+                            <h4 className="text-xl md:text-2xl font-serif font-black text-emerald-950">
                               {selectedLeaf.name}
                             </h4>
 
                             <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-slate-400 block">التفسير والتبسيط العذب</span>
-                              <p className="text-slate-700 text-xs md:text-[13px] leading-relaxed font-serif bg-white p-3.5 rounded-xl border border-slate-100 shadow-tiny">
+                              <span className="text-xs font-bold text-slate-400 block">التفسير والتبسيط العذب</span>
+                              <p className="text-slate-755 text-sm md:text-base leading-relaxed font-serif bg-white p-4 rounded-xl border border-slate-100 shadow-tiny">
                                 {selectedLeaf.explanation}
                               </p>
                             </div>
 
                             <div className="space-y-1">
-                              <span className="text-[10px] font-bold text-slate-400 block">مثال من البستان والحياة</span>
-                              <p className="text-emerald-950 text-xs font-serif leading-relaxed bg-emerald-50/50 p-3.5 rounded-xl border border-emerald-100/30">
+                              <span className="text-xs font-bold text-slate-400 block">مثال من البستان والحياة</span>
+                              <p className="text-emerald-990 text-sm md:text-base font-serif leading-relaxed bg-emerald-50/50 p-4 rounded-xl border border-emerald-100/30">
                                 🌿 <em>{selectedLeaf.example}</em>
                               </p>
                             </div>
 
-                            <div className="space-y-2 border-t border-slate-100 pt-4">
-                              <span className="text-xs font-bold text-blue-800 flex items-center gap-1 font-serif">
+                            <div className="space-y-2.5 border-t border-slate-100 pt-4">
+                              <span className="text-sm font-bold text-blue-800 flex items-center gap-1.5 font-serif">
                                 <span>❓</span>
                                 <span>سؤال التدبر من حكيم البستان</span>
                               </span>
-                              <p className="text-slate-800 text-xs md:text-sm font-serif font-bold leading-relaxed">
+                              <p className="text-slate-800 text-sm md:text-base font-serif font-bold leading-relaxed">
                                 {selectedLeaf.contemplation}
                               </p>
 
@@ -676,18 +676,18 @@ export default function App() {
                                 value={currentReflectionText}
                                 onChange={(e) => setCurrentReflectionText(e.target.value)}
                                 placeholder="اكتب تدبرك الشخصي بصدق تام هنا يا رفيقي..."
-                                className="w-full h-24 text-xs bg-white border border-slate-300 rounded-xl p-3 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition-all text-slate-800"
+                                className="w-full h-24 text-sm bg-white border border-slate-300 rounded-xl p-3 inline-block focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-transparent transition-all text-slate-800"
                               />
 
                               {reflectionNotice && (
-                                <p className="text-[11px] font-serif text-center bg-yellow-50 text-yellow-900 border border-yellow-100 p-2 rounded-lg leading-relaxed">
+                                <p className="text-xs md:text-sm font-serif text-center bg-yellow-50 text-yellow-905 border border-yellow-100 p-2.5 rounded-lg leading-relaxed">
                                   {reflectionNotice}
                                 </p>
                               )}
 
                               <button
                                 onClick={handleSaveReflection}
-                                className="w-full flex items-center justify-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white font-serif font-bold text-xs py-3 rounded-lg transition-colors shadow-xs hover:shadow-md cursor-pointer select-none"
+                                className="w-full flex items-center justify-center gap-2 bg-emerald-700 hover:bg-emerald-800 text-white font-serif font-bold text-sm py-3.5 rounded-lg transition-colors shadow-xs hover:shadow-md cursor-pointer select-none"
                               >
                                 <Award className="w-4 h-4" />
                                 <span>سجّل تأملي في المعبر</span>
@@ -698,8 +698,8 @@ export default function App() {
                       ) : (
                         <div className="bg-[#f6f5f0] border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center min-h-[300px] flex flex-col justify-center items-center gap-3">
                           <span className="text-4xl">🌾</span>
-                          <h5 className="font-serif font-bold text-slate-700">لم تختر ورقة بعد</h5>
-                          <p className="text-slate-400 text-xs leading-relaxed max-w-[200px]">
+                          <h5 className="font-serif font-bold text-slate-700 text-base">لم تختر ورقة بعد</h5>
+                          <p className="text-slate-500 text-sm leading-relaxed max-w-[200px]">
                             بستان المعرفة غني بالظلال؛ تفضل بلمس أي ورقة في الشجرة اليسرى لقراءتها.
                           </p>
                         </div>

@@ -18,8 +18,8 @@ export default function BookTree({ book, onLeafClick, selectedLeafName }: BookTr
     // Clear previous elements
     d3.select(svgRef.current).selectAll('*').remove();
 
-    // Responsive sizing
-    const width = containerRef.current.clientWidth || 700;
+    // Responsive sizing but maintaining a beautiful minimum layout spread for readability
+    const width = Math.max(containerRef.current.clientWidth || 700, 680);
     const height = 550;
 
     // Setup SVG
@@ -206,27 +206,64 @@ export default function BookTree({ book, onLeafClick, selectedLeafName }: BookTr
     });
 
     // 4. Elegant Text Labeling (Arabic text with Cairo/Tajawal look)
-    node.append('text')
-      .attr('dy', d => {
-        if (d.data.isTrunk) return 40;
-        if (d.data.isBranch) return -26;
-        return 28;
-      })
+    const textLabels = node.append('text')
       .attr('text-anchor', 'middle')
       .attr('fill', d => {
-        if (d.data.isTrunk) return '#1e293b';
+        if (d.data.isTrunk) return '#0f172a';
         if (d.data.name === selectedLeafName) return '#2563eb';
         return '#334155';
       })
       .style('font-size', d => {
-        if (d.data.isTrunk) return '14.5px';
-        if (d.data.isBranch) return '13px';
-        return '11.5px';
+        if (d.data.isTrunk) return '16.5px';
+        if (d.data.isBranch) return '15px';
+        return '13.5px'; // Scaled font sizes
       })
       .style('font-family', '"Cairo", "Tajawal", sans-serif')
       .style('font-weight', d => (d.data.isTrunk || d.data.isBranch || d.data.name === selectedLeafName) ? 'bold' : '500')
-      .style('pointer-events', 'none')
-      .text(d => d.data.name);
+      .style('pointer-events', 'none');
+
+    textLabels.each(function(d) {
+      const el = d3.select(this);
+      const name = d.data.name;
+      
+      if (d.data.isTrunk) {
+        el.attr('dy', 40).text(name);
+      } else if (d.data.isBranch) {
+        el.attr('dy', -28).text(name);
+      } else {
+        // Find leaf index within its siblings to alternate stagger vertically
+        const index = d.parent ? d.parent.children?.indexOf(d) || 0 : 0;
+        const isStaggered = index % 2 === 1;
+        const baseDy = isStaggered ? 45 : 28;
+        
+        // Split and wrap into tspans if the name is multi-word to fit narrow leaf gaps
+        const words = name.split(' ');
+        if (words.length > 1 && name.length > 8) {
+          const lines: string[] = [];
+          let currentLine = '';
+          words.forEach(word => {
+            if (!currentLine) {
+              currentLine = word;
+            } else if ((currentLine + ' ' + word).length > 10) {
+              lines.push(currentLine);
+              currentLine = word;
+            } else {
+              currentLine += ' ' + word;
+            }
+          });
+          if (currentLine) lines.push(currentLine);
+          
+          lines.forEach((lineText, lineIdx) => {
+            el.append('tspan')
+              .attr('x', 0)
+              .attr('dy', lineIdx === 0 ? baseDy : 14)
+              .text(lineText);
+          });
+        } else {
+          el.attr('dy', baseDy).text(name);
+        }
+      }
+    });
 
     // 5. Click Triggers on nodes
     node.on('click', (event, d) => {
@@ -238,40 +275,48 @@ export default function BookTree({ book, onLeafClick, selectedLeafName }: BookTr
   }, [book, onLeafClick, selectedLeafName]);
 
   return (
-    <div ref={containerRef} className="w-full bg-[#fbfbf9] rounded-2xl border border-emerald-100/40 p-4 shadow-inner relative overflow-hidden">
+    <div ref={containerRef} className="w-full bg-[#fbfbf9] rounded-3xl border border-emerald-100/50 p-6 shadow-inner relative overflow-hidden flex flex-col">
       
-      {/* Dynamic Poetic Scale legend */}
-      <div className="absolute top-4 right-4 flex flex-col gap-1 text-right bg-white/75 backdrop-blur-xs p-3 rounded-xl border border-slate-100">
-        <h5 className="text-[11px] font-bold font-serif text-emerald-950 flex items-center gap-1 justify-end">
-          <span>دليل شجرة الفكر</span>
-          <span className="text-emerald-800">🌳</span>
+      {/* Dynamic Poetic Scale Legend - Rendered Inline-Flex above the tree to avoid overlapping */}
+      <div className="mb-6 bg-white/95 p-4 rounded-2xl border border-emerald-100/40 shadow-tiny">
+        <h5 className="text-sm font-black font-serif text-emerald-950 flex items-center gap-1.5 justify-end mb-2.5 border-b border-emerald-50 pb-1.5">
+          <span>دليل شجرة الفكر والتنمية</span>
+          <span className="text-emerald-800 text-lg">🌳</span>
         </h5>
-        <div className="flex items-center gap-1.5 justify-end text-[10px] text-slate-600">
-          <span>الجذع الراسخ (الكتاب)</span>
-          <span className="w-2.5 h-2.5 bg-[#78350f] rounded-xs"></span>
-        </div>
-        <div className="flex items-center gap-1.5 justify-end text-[10px] text-slate-600">
-          <span>الأغصان الرئيسية</span>
-          <span className="w-2.5 h-2.5 bg-amber-500 rounded-full"></span>
-        </div>
-        <div className="flex items-center gap-1.5 justify-end text-[10px] text-slate-600">
-          <span>الأوراق (مفاهيم ميسرة)</span>
-          <span className="w-2.5 h-2.5 bg-emerald-700 rounded-full"></span>
-        </div>
-        <div className="flex items-center gap-1.5 justify-end text-[10px] text-blue-600 font-bold">
-          <span>الورقة النشطة للتأمل</span>
-          <span className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-pulse"></span>
+        
+        <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-3.5 text-xs text-slate-700 font-medium">
+          <div className="flex items-center gap-2">
+            <span>الجذع الراسخ (الكتاب)</span>
+            <span className="w-3.5 h-3.5 bg-[#78350f] rounded-xs border border-amber-950"></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>الأغصان الرئيسية</span>
+            <span className="w-3.5 h-3.5 bg-amber-500 rounded-full border border-amber-600/50"></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span>الأوراق (مفاهيم ميسرة)</span>
+            <span className="w-3.5 h-3.5 bg-emerald-700 rounded-full border border-emerald-800/50"></span>
+          </div>
+          <div className="flex items-center gap-2 text-blue-800 font-bold">
+            <span>الورقة النشطة للتأمل</span>
+            <span className="w-4 h-4 bg-blue-500 rounded-full border-2 border-blue-200 animate-pulse"></span>
+          </div>
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-4 text-left pointer-events-none opacity-45 text-[10px] font-serif text-[#1e293b]">
+      <div className="w-full overflow-x-auto custom-scrollbar pt-2 pb-4">
+        {/* On mobile, this will enforce a spacious min-width of 680px for a beautiful layout, while scaling normally on desktop */}
+        <div className="min-w-[650px] md:min-w-[100%]">
+          <svg 
+            ref={svgRef} 
+            className="w-full block select-none overflow-visible"
+          />
+        </div>
+      </div>
+
+      <div className="text-left pointer-events-none opacity-45 text-xs font-serif text-[#1e293b] mt-4">
         حكيم البستان مرشد التحرّر والتنمية
       </div>
-
-      <svg 
-        ref={svgRef} 
-        className="w-full block select-none overflow-visible"
-      />
     </div>
   );
 }
