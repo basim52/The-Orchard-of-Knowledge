@@ -1,5 +1,15 @@
 {
   "version": 2,
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 30,
+      "memory": 2048
+    },
+    "api/*.ts": {
+      "maxDuration": 30,
+      "memory": 2048
+    }
+  },
   "builds": [
     {
       "src": "api/index.ts",
