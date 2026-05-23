@@ -22,9 +22,15 @@ import ConsciousnessMap from './components/ConsciousnessMap';
 
 export default function App() {
   const [books, setBooks] = useState<BookData[]>(BACKUP_BOOKS);
+  const [selectedCategory, setSelectedCategory] = useState<string>('self-development');
   const [selectedBook, setSelectedBook] = useState<BookData | null>(null);
   const [view, setView] = useState<'home' | 'tree'>('home');
   const [activeTab, setActiveTab] = useState<'tree' | 'consciousness-map' | 'challenges' | 'spoils'>('tree');
+
+  // Filtered books compiled on active selected category
+  const filteredBooks = selectedCategory === 'all'
+    ? books
+    : books.filter(b => (b.category || 'self-development') === selectedCategory);
 
   // Selected Leaf details for side panel
   const [selectedLeaf, setSelectedLeaf] = useState<LeafDetail | null>(null);
@@ -309,10 +315,10 @@ export default function App() {
             {view === 'tree' && (
               <button 
                 onClick={handleBackToGarden}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-100/50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif font-bold text-emerald-900 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-100/50 cursor-pointer"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
-                <span>العودة للبستان الداخلي</span>
+                <span>العودة للبستان</span>
               </button>
             )}
             <span className="text-xs bg-slate-100 px-2.5 py-1 rounded-full text-slate-600 font-serif hidden md:inline">
@@ -329,8 +335,45 @@ export default function App() {
           /* =======================================
              HOMEPAGE: BOOKSHELF & SEED PLANTING
              ======================================= */
-          <div className="space-y-12">
+          <div className="space-y-10">
             
+            {/* Main Header & Horizontal Navigation Bar */}
+            <div className="text-center space-y-6 pt-2 pb-2">
+              <div className="space-y-2">
+                <h2 className="text-4xl md:text-5xl font-serif font-black text-emerald-950 tracking-tight">
+                  بستان المعرفة
+                </h2>
+                <p className="text-emerald-800/80 text-sm md:text-base font-serif font-medium">
+                  اختر قسمك لتبدأ الرحلة
+                </p>
+              </div>
+
+              {/* Horizontal Category Navigation */}
+              <div className="flex justify-center items-center">
+                <div className="w-full max-w-2xl bg-white rounded-2xl border border-emerald-100/60 p-1.5 shadow-xs flex gap-1 justify-between">
+                  {[
+                    { id: 'self-development', label: 'تطوير الذات', icon: '🍃' },
+                    { id: 'psychology', label: 'علم نفس', icon: '🧠' },
+                    { id: 'sociology', label: 'علم اجتماع', icon: '👥' },
+                    { id: 'children', label: 'أطفال', icon: '🧸' }
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => setSelectedCategory(cat.id)}
+                      className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1.5 py-2 px-2 sm:px-4 rounded-xl font-serif font-bold text-xs sm:text-sm border transition-all duration-300 transform active:scale-95 cursor-pointer ${
+                        selectedCategory === cat.id
+                          ? 'bg-emerald-800 text-white border-emerald-950 shadow-md shadow-emerald-800/20'
+                          : 'bg-transparent text-slate-600 border-transparent hover:bg-emerald-50 hover:text-emerald-800'
+                      }`}
+                    >
+                      <span className="text-sm sm:text-base">{cat.icon}</span>
+                      <span>{cat.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Poetical Greeting Banner */}
             <section className="bg-gradient-to-br from-emerald-800 to-teal-900 text-emerald-50 rounded-3xl p-6 md:p-12 shadow-md relative overflow-hidden">
               <div className="absolute top-0 left-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-2xl"></div>
@@ -348,7 +391,7 @@ export default function App() {
                 </p>
                 <div className="flex items-center gap-2 text-xs md:text-sm text-yellow-200 font-bold font-serif pt-2">
                   <span>🍃</span>
-                  <span>تأمل كيف تتساقط أوهام الكبرياء لتنبت بذور الشجاعة من جديد...</span>
+                  <span>تأمل كيف تتساقط أوهام الكبرياء لتنبت بذور الصدق والشجاعة من جديد...</span>
                 </div>
               </div>
             </section>
@@ -362,7 +405,7 @@ export default function App() {
                   </h3>
                   <p className="text-slate-400 text-xs">اختر كتابك لتبدأ في مرافقة أغصانه واستخراج أوراقه الذاتية</p>
                 </div>
-                <span className="text-xs text-slate-500 font-mono">الكتب المتوفرة: {books.length}</span>
+                <span className="text-xs text-slate-500 font-mono">الكتب المتوفرة: {filteredBooks.length}</span>
               </div>
 
               {/* Wooden Board Stylized Shelf */}
@@ -371,7 +414,7 @@ export default function App() {
                 
                 {/* Book Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 md:gap-8 pb-4 relative z-10">
-                  {books.map((book) => (
+                  {filteredBooks.map((book) => (
                     <div 
                       key={book.id}
                       onClick={() => handleSelectBook(book)}

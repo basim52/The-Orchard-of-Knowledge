@@ -22,6 +22,7 @@ export interface BookData {
   hasConsciousnessMap: boolean;
   challenges: string[]; // List of 7 challenges (Day 1 to 7)
   quotes: string[]; // Quotes unlocked on completing tasks
+  category?: string;
 }
 
 export interface ConsciousnessLevel {

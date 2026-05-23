@@ -34,28 +34,47 @@ async function startServer() {
 
   app.use(express.json());
 
-  // 0. API: Dynamically retrieve all book JSON files from the /data/books/ directory
+  // 0. API: Dynamically retrieve all book JSON files from the subdirectories under /data/
   app.get("/api/books", async (req, res) => {
     try {
-      const booksDir = path.join(process.cwd(), "data", "books");
-      
-      // Ensure directory exists
-      if (!fs.existsSync(booksDir)) {
-        fs.mkdirSync(booksDir, { recursive: true });
-      }
-
-      const files = fs.readdirSync(booksDir);
+      const dataRootDir = path.join(process.cwd(), "data");
       const booksData = [];
 
-      for (const file of files) {
-        if (file.endsWith(".json")) {
+      // Ensure data directory exists
+      if (!fs.existsSync(dataRootDir)) {
+        fs.mkdirSync(dataRootDir, { recursive: true });
+      }
+
+      // Read all categories directories
+      const categories = fs.readdirSync(dataRootDir, { withFileTypes: true });
+
+      for (const cat of categories) {
+        if (cat.isDirectory()) {
+          const categoryPath = path.join(dataRootDir, cat.name);
+          const files = fs.readdirSync(categoryPath);
+
+          for (const file of files) {
+            if (file.endsWith(".json")) {
+              try {
+                const filePath = path.join(categoryPath, file);
+                const content = fs.readFileSync(filePath, "utf-8");
+                const parsed = JSON.parse(content);
+                parsed.category = cat.name; // Keep track of the folder category
+                booksData.push(parsed);
+              } catch (e) {
+                console.error(`Error parsing file ${file} in ${cat.name}:`, e);
+              }
+            }
+          }
+        } else if (cat.isFile() && cat.name.endsWith(".json")) {
           try {
-            const filePath = path.join(booksDir, file);
+            const filePath = path.join(dataRootDir, cat.name);
             const content = fs.readFileSync(filePath, "utf-8");
             const parsed = JSON.parse(content);
+            parsed.category = "general";
             booksData.push(parsed);
           } catch (e) {
-            console.error(`Error parsing file ${file}:`, e);
+            console.error(`Error parsing file ${cat.name} in data root:`, e);
           }
         }
       }
