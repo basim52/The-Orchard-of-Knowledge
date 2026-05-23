@@ -1,36 +1,28 @@
 {
   "version": 2,
   "functions": {
-    "api/*.ts": {
+    "api/index.ts": {
       "maxDuration": 30,
-      "memory": 2048
+      "memory": 2048,
+      "includeFiles": "{data,dist}/**"
     }
   },
-  "builds": [
+  "rewrites": [
     {
-      "src": "api/index.ts",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "data/**",
-          "dist/**",
-          "index.html",
-          "package.json"
-        ]
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/assets/(.*)",
-      "dest": "dist/assets/$1",
-      "headers": {
-        "cache-control": "public, max-age=31536000, immutable"
-      }
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
     },
     {
-      "src": "/(.*)",
-      "dest": "api/index.ts"
+      "source": "/sitemap.xml",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/((?!assets/).*)",
+      "destination": "/api/index.ts"
     }
   ]
 }
