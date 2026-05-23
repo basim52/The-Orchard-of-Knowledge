@@ -60,7 +60,44 @@ function getAllBooks(): any[] {
 // Intercept page viewer requests and inject custom meta-data & schemas for SEO (Requirement 1, 2, 7)
 async function serveSpaWithSeo(req: express.Request, res: express.Response, htmlPath: string, viteInstance?: any) {
   try {
-    let html = fs.readFileSync(htmlPath, "utf-8");
+    let resolvedHtmlPath = htmlPath;
+    if (!fs.existsSync(resolvedHtmlPath)) {
+      const rootHtml = path.join(process.cwd(), "index.html");
+      if (fs.existsSync(rootHtml)) {
+        resolvedHtmlPath = rootHtml;
+      } else {
+        // Fallback simple HTML string to prevent ANY file structure crashes on cold-starts in Vercel
+        console.warn(`HTML file not found at ${htmlPath} or ${rootHtml}. Serving dynamic fallback HTML.`);
+        const titleFallback = "بستان المعرفة | شجرة الحكمة التفاعلية";
+        const descFallback = "تأمل خلاصة كتب النفس وتطوير الذات بطريقة شجرية تفاعلية جذابة في بستان المعرفة.";
+        return res.send(`<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${titleFallback}</title>
+  <meta name="description" content="${descFallback}" />
+  <style>
+    body { font-family: sans-serif; background-color: #0c101b; color: #f8fafc; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; text-align: center; }
+    .card { max-width: 600px; padding: 2.5rem; border-radius: 1.5rem; background-color: #111827; border: 1px solid #1f2937; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+    h1 { color: #38bdf8; font-weight: bold; margin-bottom: 1.5rem; font-size: 2rem; }
+    p { font-size: 1.125rem; line-height: 1.75; color: #9ca3af; }
+    button { background-color: #38bdf8; color: #030712; border: none; padding: 0.75rem 1.5rem; border-radius: 0.75rem; cursor: pointer; font-weight: bold; font-size: 1rem; margin-top: 1.5rem; transition: background 0.2s; }
+    button:hover { background-color: #0ea5e9; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>بستان المعرفة</h1>
+    <p>مرحباً بك يا صديقي في بستان الحكمة التفاعلي. بوابات البستان مشرعة بسلام وجارٍ تنشيط مهارات التدبر...</p>
+    <button onclick="window.location.reload()">دخول بستان الحكمة</button>
+  </div>
+</body>
+</html>`);
+      }
+    }
+
+    let html = fs.readFileSync(resolvedHtmlPath, "utf-8");
 
     if (viteInstance) {
       html = await viteInstance.transformIndexHtml(req.originalUrl || req.url, html);
@@ -199,7 +236,15 @@ async function serveSpaWithSeo(req: express.Request, res: express.Response, html
     res.send(html);
   } catch (error) {
     console.error("Error serving SPA with SEO:", error);
-    res.sendFile(htmlPath);
+    try {
+      if (fs.existsSync(htmlPath)) {
+        res.sendFile(htmlPath);
+      } else {
+        res.status(500).send("عذراً، حدثت هزة خفيفة في بستان الحكمة أعاقت سقاية الشجرة التفاعلية ريثما تهدأ الريح.");
+      }
+    } catch (e) {
+      res.status(500).send("عذراً، حدث خطأ غير متوقع.");
+    }
   }
 }
 
@@ -447,56 +492,59 @@ app.use(express.json());
   });
 
   // 3. Vite development vs static production server integration
-  async function setupViteOrStatic() {
-    if (process.env.NODE_ENV !== "production") {
-      const { createServer: createViteServer } = await import("vite");
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
+  if (process.env.NODE_ENV !== "production") {
+    const setupVite = async () => {
+      try {
+        const vitePkg = "vite";
+        const { createServer: createViteServer } = await import(vitePkg);
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
 
-      // Intercept page views for dev meta tag insertion
-      app.get("*", async (req, res, next) => {
-        const isHtmlRequest = req.headers.accept?.includes("text/html");
-        if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
-          return next();
-        }
-        try {
-          await serveSpaWithSeo(req, res, path.join(process.cwd(), "index.html"), vite);
-        } catch (e) {
-          next(e);
-        }
-      });
-
-      app.use(vite.middlewares);
-    } else {
-      const distPath = path.join(process.cwd(), "dist");
-      
-      // Serve static files, but bypass index.html so our custom wildcard route can inject meta tags
-      app.use(express.static(distPath, { index: false }));
-
-      app.get("*", async (req, res) => {
-        const isHtmlRequest = req.headers.accept?.includes("text/html") || req.path === "/";
-        if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
-          const filePath = path.join(distPath, req.path);
-          if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
-            return res.sendFile(filePath);
+        // Intercept page views for dev meta tag insertion
+        app.get("*", async (req, res, next) => {
+          const isHtmlRequest = req.headers.accept?.includes("text/html");
+          if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
+            return next();
           }
+          try {
+            await serveSpaWithSeo(req, res, path.join(process.cwd(), "index.html"), vite);
+          } catch (e) {
+            next(e);
+          }
+        });
+
+        app.use(vite.middlewares);
+      } catch (err) {
+        console.error("Error setting up Vite development server:", err);
+      }
+    };
+    setupVite();
+  } else {
+    // Production: setup routes 100% synchronously so serverless functions never encounter event-loop initialization races
+    const distPath = path.join(process.cwd(), "dist");
+    
+    // Serve static files, but bypass index.html so our custom wildcard route can inject meta tags
+    app.use(express.static(distPath, { index: false }));
+
+    app.get("*", async (req, res) => {
+      const isHtmlRequest = req.headers.accept?.includes("text/html") || req.path === "/";
+      if (!isHtmlRequest || req.path.startsWith("/api/") || req.path === "/sitemap.xml" || req.path === "/robots.txt") {
+        const filePath = path.join(distPath, req.path);
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          return res.sendFile(filePath);
         }
-        await serveSpaWithSeo(req, res, path.join(distPath, "index.html"));
-      });
-    }
+      }
+      await serveSpaWithSeo(req, res, path.join(distPath, "index.html"));
+    });
   }
 
-  setupViteOrStatic().then(() => {
-    if (!process.env.VERCEL) {
-      const PORT = Number(process.env.PORT) || 3000;
-      app.listen(PORT, "0.0.0.0", () => {
-        console.log(`[حكيم البستان] بوابات بستان الحكمة مشرعة بسلام على المرفأ: http://localhost:${PORT}`);
-      });
-    }
-  }).catch((err) => {
-    console.error("Error setting up server routes:", err);
-  });
+  if (!process.env.VERCEL) {
+    const PORT = Number(process.env.PORT) || 3000;
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`[حكيم البستان] بوابات بستان الحكمة مشرعة بسلام على المرفأ: http://localhost:${PORT}`);
+    });
+  }
 
   export default app;
