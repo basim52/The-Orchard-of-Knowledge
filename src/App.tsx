@@ -20,6 +20,29 @@ import { BACKUP_BOOKS } from './defaultBooks';
 import BookTree from './components/BookTree';
 import ConsciousnessMap from './components/ConsciousnessMap';
 
+// Import Firebase config & operational helpers
+import { 
+  auth, 
+  googleProvider, 
+  db, 
+  handleFirestoreError, 
+  OperationType 
+} from './firebase';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  signOut, 
+  User 
+} from 'firebase/auth';
+import { 
+  doc, 
+  getDoc, 
+  getDocs,
+  setDoc,
+  collection,
+  serverTimestamp
+} from 'firebase/firestore';
+
 export default function App() {
   const [books, setBooks] = useState<BookData[]>(BACKUP_BOOKS);
   const [selectedCategory, setSelectedCategory] = useState<string>('self-development');
@@ -51,6 +74,114 @@ export default function App() {
   // Unlocked Spoils (Quotes) per book
   const [unlockedLevel, setUnlockedLevel] = useState<Record<string, number>>({}); // bookId -> number of unlocked quotes index
 
+  // Firebase Auth & loading States
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [authError, setAuthError] = useState('');
+
+  // Helper to sync user progress state to Firestore
+  const syncUserProgressToFirestore = async (
+    uid: string,
+    challenges: Record<string, string[]>,
+    userReflections: Record<string, { leafName: string, text: string, date: string }[]>,
+    unlocked: Record<string, number>
+  ) => {
+    try {
+      const pPath = `users/${uid}/progress/data`;
+      await setDoc(doc(db, pPath), {
+        userId: uid,
+        completedChallenges: challenges,
+        reflections: userReflections,
+        unlockedLevel: unlocked,
+        updatedAt: serverTimestamp()
+      });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `users/${uid}/progress/data`);
+    }
+  };
+
+  // Listen to Authentication sessions and dynamically fetch cloud progress
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setIsLoadingAuth(false);
+      
+      if (currentUser) {
+        try {
+          const pPath = `users/${currentUser.uid}/progress/data`;
+          const pDoc = await getDoc(doc(db, pPath));
+          
+          let challenges = completedChallenges;
+          let userReflections = reflections;
+          let unlocked = unlockedLevel;
+          
+          if (pDoc.exists()) {
+            const remoteData = pDoc.data();
+            challenges = remoteData.completedChallenges || {};
+            userReflections = remoteData.reflections || {};
+            unlocked = remoteData.unlockedLevel || {};
+            
+            setCompletedChallenges(challenges);
+            setReflections(userReflections);
+            setUnlockedLevel(unlocked);
+            
+            // Mirror to localStorage to keep offline backups ready
+            localStorage.setItem('garden_challenges', JSON.stringify(challenges));
+            localStorage.setItem('garden_reflections', JSON.stringify(userReflections));
+            localStorage.setItem('garden_unlocked_quotes', JSON.stringify(unlocked));
+          } else {
+            // First time logging in. Promote existing local progress to cloud
+            const savedChallenges = localStorage.getItem('garden_challenges');
+            const savedReflections = localStorage.getItem('garden_reflections');
+            const savedUnlocked = localStorage.getItem('garden_unlocked_quotes');
+            
+            const localCh = savedChallenges ? JSON.parse(savedChallenges) : {};
+            const localRef = savedReflections ? JSON.parse(savedReflections) : {};
+            const localUnl = savedUnlocked ? JSON.parse(savedUnlocked) : {};
+            
+            await setDoc(doc(db, pPath), {
+              userId: currentUser.uid,
+              completedChallenges: localCh,
+              reflections: localRef,
+              unlockedLevel: localUnl,
+              updatedAt: serverTimestamp()
+            });
+          }
+          
+          // Also fetch custom books planted by this user
+          const cbCollection = collection(db, `users/${currentUser.uid}/customBooks`);
+          const cbSnap = await getDocs(cbCollection);
+          const remoteCustomBooks: BookData[] = [];
+          cbSnap.forEach((docSnapshot) => {
+            remoteCustomBooks.push(docSnapshot.data() as BookData);
+          });
+          
+          setBooks(prevBooks => {
+            const staticBooks = prevBooks.filter(b => !b.id.startsWith('custom-'));
+            return [...remoteCustomBooks, ...staticBooks];
+          });
+          
+        } catch (err) {
+          console.error("Error matching profile info: ", err);
+        }
+      } else {
+        // Fallback to offline localStorage on sign out
+        const savedChallenges = localStorage.getItem('garden_challenges');
+        const savedReflections = localStorage.getItem('garden_reflections');
+        const savedUnlocked = localStorage.getItem('garden_unlocked_quotes');
+
+        if (savedChallenges) setCompletedChallenges(JSON.parse(savedChallenges));
+        if (savedReflections) setReflections(JSON.parse(savedReflections));
+        if (savedUnlocked) setUnlockedLevel(JSON.parse(savedUnlocked));
+        
+        // Remove customized books from state on sign out
+        setBooks(prevBooks => prevBooks.filter(b => !b.id.startsWith('custom-')));
+      }
+    });
+
+    return () => unsubscribe();
+  }, [auth]);
+
   // Attempt to fetch books from backend on startup, fallback to backups
   useEffect(() => {
     async function loadBooks() {
@@ -80,20 +211,29 @@ export default function App() {
     if (savedUnlocked) setUnlockedLevel(JSON.parse(savedUnlocked));
   }, []);
 
-  // Sync helpers
-  const saveChallenges = (updated: Record<string, string[]>) => {
+  // Sync helpers with cloud awareness
+  const saveChallenges = async (updated: Record<string, string[]>) => {
     setCompletedChallenges(updated);
     localStorage.setItem('garden_challenges', JSON.stringify(updated));
+    if (user) {
+      await syncUserProgressToFirestore(user.uid, updated, reflections, unlockedLevel);
+    }
   };
 
-  const saveReflections = (updated: Record<string, { leafName: string, text: string, date: string }[]>) => {
+  const saveReflections = async (updated: Record<string, { leafName: string, text: string, date: string }[]>) => {
     setReflections(updated);
     localStorage.setItem('garden_reflections', JSON.stringify(updated));
+    if (user) {
+      await syncUserProgressToFirestore(user.uid, completedChallenges, updated, unlockedLevel);
+    }
   };
 
-  const saveUnlocked = (updated: Record<string, number>) => {
+  const saveUnlocked = async (updated: Record<string, number>) => {
     setUnlockedLevel(updated);
     localStorage.setItem('garden_unlocked_quotes', JSON.stringify(updated));
+    if (user) {
+      await syncUserProgressToFirestore(user.uid, completedChallenges, reflections, updated);
+    }
   };
 
   // Navigations
@@ -272,6 +412,20 @@ export default function App() {
       };
 
       // Set state and select it immediately!
+      if (user) {
+        try {
+          const bookPath = `users/${user.uid}/customBooks/${mappedBook.id}`;
+          const bookToSave = {
+            ...mappedBook,
+            userId: user.uid,
+            createdAt: serverTimestamp()
+          };
+          await setDoc(doc(db, bookPath), bookToSave);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.CREATE, `users/${user.uid}/customBooks/${mappedBook.id}`);
+        }
+      }
+
       setBooks([mappedBook, ...books]);
       setSelectedBook(mappedBook);
       setSeedTitle('');
@@ -284,6 +438,26 @@ export default function App() {
       setPlantingError('عذراً يارفيقي؛ هبّت عاصفة عابرة أعاقت زراعة بذرتك في الخادم. هلاّ جربت العنوان من جديد؟');
     } finally {
       setIsPlanting(false);
+    }
+  };
+
+  // Google Authentication trigger
+  const handleSignIn = async () => {
+    setAuthError('');
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err: any) {
+      console.error("Popup block or network error inside iframe environment:", err);
+      setAuthError('تعذر تسجيل الدخول باستخدام غوغل. يرجى المحاولة مرة أخرى.');
+    }
+  };
+
+  // Sign out trigger
+  const handleSignOut = async () => {
+    try {
+      await signOut(auth);
+    } catch (err: any) {
+      console.error("Error signing out:", err);
     }
   };
 
@@ -321,9 +495,54 @@ export default function App() {
                 <span>العودة للبستان</span>
               </button>
             )}
-            <span className="text-xs bg-slate-100 px-2.5 py-1 rounded-full text-slate-600 font-serif hidden md:inline">
-              مرشد البستان: حكيم اليقظة
-            </span>
+            
+            {isLoadingAuth ? (
+              <span className="text-xs text-slate-400 font-serif flex items-center gap-1 bg-slate-50 border border-slate-100 px-3 py-1.5 rounded-full">
+                <RefreshCw className="w-3 h-3 animate-spin text-emerald-700" />
+                <span>تحقق...</span>
+              </span>
+            ) : user ? (
+              <div className="flex items-center gap-2">
+                <div className="hidden sm:flex flex-col text-right">
+                  <span className="text-xs font-bold text-slate-800 font-serif max-w-[120px] truncate">
+                    {user.displayName || user.email?.split('@')[0]}
+                  </span>
+                  <button 
+                    onClick={handleSignOut}
+                    className="text-[10px] text-red-600 hover:text-red-700 font-serif font-bold hover:underline transition-all cursor-pointer text-right inline-block self-end mt-0.5"
+                  >
+                    تسجيل الخروج
+                  </button>
+                </div>
+                {user.photoURL ? (
+                  <img 
+                    src={user.photoURL} 
+                    alt={user.displayName || "User"} 
+                    className="w-8 h-8 rounded-full border border-emerald-100 shadow-tiny object-cover shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-emerald-700 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    {user.displayName ? user.displayName[0].toUpperCase() : '👤'}
+                  </div>
+                )}
+                {/* Mobile logout link only */}
+                <button 
+                  onClick={handleSignOut}
+                  className="sm:hidden text-xs bg-red-50 text-red-600 hover:bg-red-100 px-2 py-1.5 rounded-lg font-serif font-bold transition-colors cursor-pointer"
+                >
+                  خروج
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={handleSignIn}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-serif font-bold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors border border-emerald-800 cursor-pointer shadow-xs active:scale-95 duration-100"
+              >
+                <span>👤</span>
+                <span>دخول غوغل</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -395,6 +614,46 @@ export default function App() {
                 </div>
               </div>
             </section>
+
+            {/* Firebase Auth Error Alert */}
+            {authError && (
+              <div className="bg-red-50 text-red-800 border-2 border-red-100 p-4 rounded-2xl text-xs md:text-sm font-serif flex items-center justify-between gap-4 shadow-sm animate-pulse">
+                <span className="flex items-center gap-2">
+                  <span>🚨</span>
+                  <span>{authError}</span>
+                </span>
+                <button 
+                  onClick={() => setAuthError('')}
+                  className="bg-red-100 text-red-800 hover:bg-red-200 px-3 py-1 rounded-lg font-bold"
+                >
+                  إغلاق
+                </button>
+              </div>
+            )}
+
+            {/* Cloud Storage CTA Banner */}
+            {!user && (
+              <div className="bg-amber-50/45 border border-amber-200/40 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-sm transition-all duration-300">
+                <div className="flex items-start gap-3.5 text-right w-full">
+                  <span className="text-3xl mt-0.5 shrink-0 select-none">☁️</span>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-serif font-black text-amber-955 flex items-center gap-1">
+                      <span>احفظ وسجّل بستانك في السحابة</span>
+                    </h4>
+                    <p className="text-amber-900/80 text-xs font-serif leading-relaxed">
+                      "يا رفيقي الساعي، تقدمك في سقاية أشجارك المعرفية وكتابة تأملاتك ممتد وأصيل. سجّل دخولك بحساب غوغل لحفظ إنجازاتك وسقياك بشكل آمن، ومزامنتها تلقائياً لتطالع معبرك أينما ارتحلت."
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={handleSignIn}
+                  className="bg-emerald-750 hover:bg-emerald-800 text-white bg-emerald-700 font-serif font-black text-xs px-5 py-3 rounded-2xl flex items-center gap-2 cursor-pointer max-w-full shrink-0 shadow-sm active:scale-95 duration-100 border border-emerald-900"
+                >
+                  <span>تسجيل الدخول الآن بحساب غوغل</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* THE WOODEN BOOKSHELF */}
             <section className="space-y-6">

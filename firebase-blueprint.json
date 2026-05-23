@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "UserProgress": {
+      "title": "UserProgress",
+      "description": "User's progress including completed challenges, reflections, and unlocked quotes.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The Firebase Auth user ID." },
+        "completedChallenges": { "type": "object", "description": "Dictionary of bookId to arrays of completed challenge days." },
+        "reflections": { "type": "object", "description": "Dictionary of bookId to arrays of reflection objects." },
+        "unlockedLevel": { "type": "object", "description": "Dictionary of bookId to count of unlocked quotes." },
+        "updatedAt": { "type": "string", "description": "Timestamp when this progress was last updated." }
+      },
+      "required": ["userId", "updatedAt"]
+    },
+    "CustomBook": {
+      "title": "CustomBook",
+      "description": "A custom book planted by the user using Gemini AI.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "cover": { "type": "string" },
+        "essence": { "type": "string" },
+        "mindsetShifts": { "type": "array" },
+        "trunk": { "type": "string" },
+        "branches": { "type": "array" },
+        "challenges": { "type": "array" },
+        "quotes": { "type": "array" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "author", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}/progress/data": {
+      "schema": "UserProgress",
+      "description": "The user's individual reading garden progress."
+    },
+    "users/{userId}/customBooks/{bookId}": {
+      "schema": "CustomBook",
+      "description": "Custom books added by the user."
+    }
+  }
+}
